@@ -8,7 +8,7 @@ Total of 1.6Billion USDE
 
 1 Minute Block Targets
 
-6 Hour Diff Readjustments
+2 Hour dif
 
 120 Coin maturity
 
