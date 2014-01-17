@@ -57,8 +57,7 @@ map<uint256, map<uint256, CDataStream*> > mapOrphanTransactionsByPrev;
 // Constant stuff for coinbase transactions we create:
 CScript COINBASE_FLAGS;
 
-const string strMessage
- = "usde Signed Message:\n";
+const string strMessageMagic = "usde Signed Message:\n";
 
 double dHashesPerSec;
 int64 nHPSTimerStart;
@@ -706,7 +705,7 @@ int CMerkleTx::GetBlocksToMaturity() const
 {
     if (!IsCoinBase())
         return 0;
-    return max(0, (COINBASE_MATURITY) - GetDepthInMainChain());
+    return max(0, (COINBASE_MATURITY+20) - GetDepthInMainChain());
 }
 
 
@@ -868,12 +867,13 @@ int64 static GetBlockValue(int nHeight, int64 nFees)
 	  }
 	  
 	  
+	  nSubsidy >>= (nHeight / 139604);
 	
     return nSubsidy + nFees;
 }
 
-static const int64 nTargetTimespan = 2 * 60 * 60; // USDE: 2 hours
-static const int64 nTargetSpacing = 60; // USDE: 60 seconds
+static int64 nTargetTimespan = 2 * 60 * 60; // USDE: 2 hours
+static int64 nTargetSpacing = 60; // USDE: 60 seconds
 
 //
 // minimum amount of work that could possibly be required nTime after
@@ -902,20 +902,34 @@ unsigned int ComputeMinWork(unsigned int nBase, int64 nTime)
 
 unsigned int static GetNextWorkRequired(const CBlockIndex* pindexLast, const CBlock *pblock)
 {
+  int nHeight = pindexLast->nHeight + 1;
+
+        int64 nInterval;
+        int64 nActualTimespanMax;
+        int64 nActualTimespanMin;
+        int64 nTargetTimespanCurrent;
+		 
+        if (nHeight > 27000)
+        {   //Fixed
+                nTargetTimespan = 2 * 60 * 60; // Retarget every 120 blocks (10 minutes)
+                nTargetSpacing = 1 * 60; // 60 seconds
+                nInterval = nTargetTimespan / nTargetSpacing;
+                
+				nActualTimespanMax = nTargetTimespan * 100/125; //25% Up
+                nActualTimespanMin = nTargetTimespan * 2; //50% down
+        }   
+        else
+        {   //Old Protocol
+                nTargetTimespan = 2 * 60 * 60; // Retarget every 120 blocks (2 hour).. Since digitalcoin used inflation it was actually 1200 blocks
+                nTargetSpacing = 1 * 60; // 60 seconds
+                nTargetTimespanCurrent =  (nTargetTimespan*5);
+				nInterval = (nTargetTimespanCurrent / (nTargetSpacing / 2));
+   
+
+        }
+
     unsigned int nProofOfWorkLimit = bnProofOfWorkLimit.GetCompact();
 
-// USDE difficulty adjustment protocol switch
-   static const int nDifficultySwitchHeight = 476280;
-   static const int nInflationFixHeight = 523800;
-   static const int nDifficultySwitchHeightTwo = 625800;
-   int nHeight = pindexLast->nHeight + 1;
-   bool fNewDifficultyProtocol = (nHeight >= nDifficultySwitchHeight || fTestNet);
-   bool fInflationFixProtocol = (nHeight >= nInflationFixHeight || fTestNet);
-   bool fDifficultySwitchHeightTwo = (nHeight >= nDifficultySwitchHeightTwo || fTestNet);         
-
-   int64 nTargetTimespanCurrent = fInflationFixProtocol? nTargetTimespan : (nTargetTimespan*5);
-   int64 nInterval = fInflationFixProtocol? (nTargetTimespanCurrent / nTargetSpacing) : (nTargetTimespanCurrent / (nTargetSpacing / 2));
-   
     // Genesis block
     if (pindexLast == NULL)
         return nProofOfWorkLimit;
@@ -943,49 +957,62 @@ unsigned int static GetNextWorkRequired(const CBlockIndex* pindexLast, const CBl
         return pindexLast->nBits;
     }
 
-    // usde: This fixes an issue where a 51% attack can change difficulty at will.
+    // StableCoin: This fixes an issue where a 51% attack can change difficulty at will.
     // Go back the full period unless it's the first retarget after genesis. Code courtesy of Art Forz
     int blockstogoback = nInterval-1;
     if ((pindexLast->nHeight+1) != nInterval)
         blockstogoback = nInterval;
 
-    // Go back by what we want to be the last intervals worth of blocks
+    // Go back by what we want to be 14 days worth of blocks
     const CBlockIndex* pindexFirst = pindexLast;
     for (int i = 0; pindexFirst && i < blockstogoback; i++)
         pindexFirst = pindexFirst->pprev;
     assert(pindexFirst);
 
+	 int64 nActualTimespan = pindexLast->GetBlockTime() - pindexFirst->GetBlockTime();
+	 
+	 if (nHeight > 27000)
+        {   //Fixed
+            printf("  nActualTimespan = %"PRI64d"  before bounds\n", nActualTimespan);
+			if (nActualTimespan < nActualTimespanMax)
+				nActualTimespan = nActualTimespanMax;
+			if (nActualTimespan > nActualTimespanMin)
+				nActualTimespan = nActualTimespanMin;
+        }   
+        else
+        {   
+			//old protocol
+            nActualTimespanMax =  (nTargetTimespanCurrent*4);
+			nActualTimespanMin =  (nTargetTimespanCurrent/4);
+	
+			
+			if (nActualTimespan > nActualTimespanMax)
+				nActualTimespan = nActualTimespanMax;	
+			if (nActualTimespan < nActualTimespanMin)
+				nActualTimespan = nActualTimespanMin;
+			
+				
+			nTargetTimespan = nTargetTimespanCurrent;
+        }
+	
+	
     // Limit adjustment step
-    int64 nActualTimespan = pindexLast->GetBlockTime() - pindexFirst->GetBlockTime();
-    printf(" nActualTimespan = %"PRI64d" before bounds\n", nActualTimespan);
 
-    int64 nActualTimespanMax = fNewDifficultyProtocol? (nTargetTimespanCurrent*2) : (nTargetTimespanCurrent*4);
-    int64 nActualTimespanMin = fNewDifficultyProtocol? (nTargetTimespanCurrent/2) : (nTargetTimespanCurrent/4);
-	
-	//new for v1.0.1
-	if (fDifficultySwitchHeightTwo){
-	    nActualTimespanMax = ((nTargetTimespanCurrent*75)/60);
-		nActualTimespanMin = ((nTargetTimespanCurrent*55)/73); }
-	
-    if (nActualTimespan < nActualTimespanMin)
-        nActualTimespan = nActualTimespanMin;
-    if (nActualTimespan > nActualTimespanMax)
-        nActualTimespan = nActualTimespanMax;
 
     // Retarget
     CBigNum bnNew;
     bnNew.SetCompact(pindexLast->nBits);
     bnNew *= nActualTimespan;
-    bnNew /= nTargetTimespanCurrent;
+    bnNew /= nTargetTimespan;
 
     if (bnNew > bnProofOfWorkLimit)
         bnNew = bnProofOfWorkLimit;
 
     /// debug print
     printf("GetNextWorkRequired RETARGET\n");
-    printf("nTargetTimespan = %"PRI64d" nActualTimespan = %"PRI64d"\n", nTargetTimespanCurrent, nActualTimespan);
-    printf("Before: %08x %s\n", pindexLast->nBits, CBigNum().SetCompact(pindexLast->nBits).getuint256().ToString().c_str());
-    printf("After: %08x %s\n", bnNew.GetCompact(), bnNew.getuint256().ToString().c_str());
+    printf("nTargetTimespan = %"PRI64d"    nActualTimespan = %"PRI64d"\n", nTargetTimespan, nActualTimespan);
+    printf("Before: %08x  %s\n", pindexLast->nBits, CBigNum().SetCompact(pindexLast->nBits).getuint256().ToString().c_str());
+    printf("After:  %08x  %s\n", bnNew.GetCompact(), bnNew.getuint256().ToString().c_str());
 
     return bnNew.GetCompact();
 }

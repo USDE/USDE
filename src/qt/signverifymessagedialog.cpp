@@ -139,8 +139,7 @@ void SignVerifyMessageDialog::on_signMessageButton_SM_clicked()
     }
 
     CDataStream ss(SER_GETHASH, 0);
-    ss << strMessage
-;
+    ss << strMessageMagic;
     ss << ui->messageIn_SM->document()->toPlainText().toStdString();
 
     std::vector<unsigned char> vchSig;
@@ -216,8 +215,7 @@ void SignVerifyMessageDialog::on_verifyMessageButton_VM_clicked()
     }
 
     CDataStream ss(SER_GETHASH, 0);
-    ss << strMessage
-;
+    ss << strMessageMagic;
     ss << ui->messageIn_VM->document()->toPlainText().toStdString();
 
     CKey key;

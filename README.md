@@ -1,7 +1,7 @@
 # USDE [USDE]
 http://www.USD-e.com
 
-![USDE](http://i.imgur.com/YV1GaAS.png)
+![USDE](http://imgur.com/EXiLTgY)
 
 ### Specs:
 Total of 1.6Billion USDE
@@ -11,6 +11,8 @@ Total of 1.6Billion USDE
 2 Hour dif
 
 120 Coin maturity
+
+Block reward halving every 130,000 blocks
 
 P2P: 54449
 

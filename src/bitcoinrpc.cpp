@@ -697,8 +697,7 @@ Value signmessage(const Array& params, bool fHelp)
         throw JSONRPCError(-4, "Private key not available");
 
     CDataStream ss(SER_GETHASH, 0);
-    ss << strMessage
-;
+    ss << strMessageMagic;
     ss << strMessage;
 
     vector<unsigned char> vchSig;
@@ -734,8 +733,7 @@ Value verifymessage(const Array& params, bool fHelp)
         throw JSONRPCError(-5, "Malformed base64 encoding");
 
     CDataStream ss(SER_GETHASH, 0);
-    ss << strMessage
-;
+    ss << strMessageMagic;
     ss << strMessage;
 
     CKey key;
